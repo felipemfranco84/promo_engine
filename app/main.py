@@ -1,11 +1,38 @@
-from fastapi import FastAPI
-from app.core.config import settings
-from app.routers import users
+import logging
+from fastapi import FastAPI, Request, Depends
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from core.database import SessionLocal, PromoModel
 
-app = FastAPI(title=settings.PROJECT_NAME)
+logger = logging.getLogger("WebPanel")
+app = FastAPI(title="PromoEngine Dashboard")
+templates = Jinja2Templates(directory="app/templates")
 
-app.include_router(users.router)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
-def read_root():
-    return {"status": "Online", "project": settings.PROJECT_NAME}
+async def home(request: Request, db: Session = Depends(get_db)):
+    """
+    Interface visual para auditoria das capturas em tempo real.
+    """
+    try:
+        # Busca as últimas 50 promoções (corrigido para order_by)
+        promocoes = db.query(PromoModel).order_by(PromoModel.data_criacao.desc()).limit(50).all()
+        
+        return templates.TemplateResponse("index.html", {
+            "request": request,
+            "promocoes": promocoes,
+            "status_worker": "Ativo"
+        })
+    except Exception as e:
+        logger.error(f"Erro ao renderizar dashboard: {e}", exc_info=True)
+        return {"error": "Falha interna no painel."}
+
+@app.get("/health")
+def health_check():
+    return {"status": "online", "version": "3.1.0"}
