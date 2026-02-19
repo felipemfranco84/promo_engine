@@ -3,7 +3,7 @@ import os
 from pydantic_settings import BaseSettings
 from typing import List
 
-# Garante que o diretório de logs exista
+# Docstring: Garante a infraestrutura de logs antes da carga de configs.
 LOG_DIR = "logs"
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
@@ -20,16 +20,16 @@ logger = logging.getLogger("ConfigModule")
 
 class Settings(BaseSettings):
     """
-    Docstring: Centralização de configurações e segredos.
-    O motivo desta lógica existir é prover ao sistema acesso às credenciais
-    do Telegram e ao caminho do banco de dados SQLite.
+    Docstring: Esquema de configurações do sistema.
+    O motivo desta lógica existir é centralizar o acesso a variáveis de ambiente
+    e parâmetros globais do banco de dados e Telegram.
     """
     API_ID: int
     API_HASH: str
     PHONE_NUMBER: str
     MY_PRIVATE_GROUP_ID: int
     
-    # Atributo que estava faltando:
+    # Campo obrigatório para persistência - DEVE ESTAR AQUI
     DATABASE_URL: str = "sqlite:///./promo_engine.db"
     
     TARGET_CHANNELS: List[str] = ["gafanhotopromocoes", "pelando", "cupomonline"]
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
 try:
     settings = Settings()
-    logger.info("Configurações carregadas com sucesso.")
+    logger.info("Configurações validadas e carregadas.")
 except Exception as e:
-    logger.error(f"Erro ao carregar Settings: {e}")
+    logger.error(f"Falha crítica na validação das configurações: {e}")
     raise
