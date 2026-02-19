@@ -6,11 +6,10 @@ from config import settings
 
 logger = logging.getLogger("DatabaseModule")
 
-# Padrão SQLAlchemy 2.0 para evitar Warnings
+# Padrão SQLAlchemy 2.0 para eliminar Warnings
 Base = declarative_base()
 
 class PromoModel(Base):
-    """Representa a tabela de promoções capturadas."""
     __tablename__ = "promotions"
     id = Column(String, primary_key=True)
     titulo = Column(String)
@@ -20,33 +19,31 @@ class PromoModel(Base):
     data_captura = Column(DateTime, default=datetime.utcnow)
 
 class ConfigModel(Base):
-    """Representa a tabela de configurações web (Filtros e Canais)."""
     __tablename__ = "system_configs"
     id = Column(String, primary_key=True, default="global")
     keywords = Column(String, default="iphone,celular,cupom,monitor,cerveja")
     channels = Column(String, default="gafanhotopromocoes,pelando,cupomonline")
 
-# Bloco try/except conforme padrão Arquiteto Python
+# Bloco try/except com verificação de atributo
 try:
-    # Verificação defensiva antes de instanciar a engine
-    if not hasattr(settings, 'DATABASE_URL'):
-        raise AttributeError("A configuração 'DATABASE_URL' não foi encontrada no objeto settings.")
-        
+    # Verificação forçada do atributo DATABASE_URL
+    db_url = getattr(settings, 'DATABASE_URL', "sqlite:///./promo_engine.db")
+    
     engine = create_engine(
-        settings.DATABASE_URL, 
+        db_url, 
         connect_args={"check_same_thread": False}
     )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    logger.info("Conexão com SQLite preparada.")
+    logger.info(f"Engine configurada com: {db_url}")
 except Exception as e:
     logger.error(f"Erro fatal ao configurar Engine: {e}")
     raise
 
 def init_db():
-    """Inicializa as tabelas no arquivo .db."""
+    """Cria as tabelas se não existirem."""
     try:
         Base.metadata.create_all(bind=engine)
-        logger.info("Tabelas inicializadas com sucesso (v7.2.1).")
+        logger.info("Tabelas inicializadas com sucesso (v7.2.2).")
     except Exception as e:
         logger.error(f"Erro ao criar tabelas: {e}")
 
