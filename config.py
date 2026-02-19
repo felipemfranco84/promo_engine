@@ -3,12 +3,16 @@ import os
 from pydantic_settings import BaseSettings
 from typing import List
 
-# Configuração de Log de Depuração (Obrigatório conforme protocolo)
+# Garante que o diretório de logs exista
+LOG_DIR = "logs"
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("logs/engine.log"),
+        logging.FileHandler(os.path.join(LOG_DIR, "engine.log")),
         logging.StreamHandler()
     ]
 )
@@ -16,32 +20,31 @@ logger = logging.getLogger("ConfigModule")
 
 class Settings(BaseSettings):
     """
-    Docstring: Gerencia todas as variáveis sensíveis e constantes do sistema.
-    O motivo desta lógica existir é centralizar o estado de configuração e 
-    garantir que o sistema não inicie sem as credenciais necessárias.
+    Docstring: Gerencia as configurações via .env e define filtros de busca.
+    O motivo desta lógica existir é centralizar o estado e permitir 
+    a filtragem seletiva de ofertas para o Telegram.
     """
     API_ID: int
     API_HASH: str
     PHONE_NUMBER: str
+    MY_PRIVATE_GROUP_ID: int
     DATABASE_URL: str = "sqlite:///./promo_engine.db"
     
-    # Canais para monitorar (Baseado no seu print do Telegram)
-    TARGET_CHANNELS: List[str] = [
-        "gafanhotopromocoes", 
-        "pelando", 
-        "cupomonline", 
-        "mercadolivre"
-    ]
+    # Canais que o bot deve monitorar
+    TARGET_CHANNELS: List[str] = ["gafanhotopromocoes", "pelando", "cupomonline", "mercadolivre"]
     
-    # Grupo de destino (Onde o bot enviará para você)
-    MY_PRIVATE_GROUP_ID: int
+    # PALAVRAS-CHAVE: Apenas ofertas com estes termos irão para o seu Telegram
+    KEYWORDS_INTEREST: List[str] = ["iphone", "celular", "cerveja", "rtx", "monitor", "cupom", "notebook"]
 
-    class Config:
-        env_file = ".env"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
 
 try:
     settings = Settings()
-    logger.info("Configurações carregadas com sucesso.")
+    logger.info("Configurações e filtros de interesse carregados.")
 except Exception as e:
     logger.error(f"Erro crítico ao carregar configurações: {e}")
     raise

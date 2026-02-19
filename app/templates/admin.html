@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Configurações | PromoEngine</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-5">
+    <h2 class="mb-4">⚙️ Painel de Controle</h2>
+    <form action="/promo_engine/admin/save" method="post" class="card p-4 shadow-sm">
+        <div class="mb-3">
+            <label class="form-label fw-bold">Palavras-Chave de Interesse (separadas por vírgula)</label>
+            <textarea name="keywords" class="form-control" rows="3">{{ config.keywords }}</textarea>
+            <small class="text-muted">Apenas ofertas com estes termos irão para o seu Telegram.</small>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Canais Monitorados (Usernames)</label>
+            <input type="text" name="channels" class="form-control" value="{{ config.channels }}">
+        </div>
+        <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+        <a href="/promo_engine/" class="btn btn-link">Voltar ao Dashboard</a>
+    </form>
+</div>
+</body>
+</html>

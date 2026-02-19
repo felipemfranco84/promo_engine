@@ -1,35 +1,21 @@
 import logging
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Form
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from core.database import SessionLocal, PromoModel
+from core.database import SessionLocal, PromoModel, ConfigModel
+from fastapi.responses import RedirectResponse
 
-# Configuração de Logs conforme diretriz do Arquiteto
-logger = logging.getLogger("WebPanel")
+logger = logging.getLogger("WebDashboard")
 
-# Inicialização do FastAPI com root_path para compatibilidade com Nginx
-# O root_path garante que todas as URLs geradas pelo FastAPI prefixem /promo_engine
-app = FastAPI(
-    title="PromoEngine Dashboard",
-    description="Painel de controle para monitoramento de ofertas e promoções.",
-    version="3.2.0",
-    root_path="/promo_engine"
-)
+app = FastAPI(title="PromoEngine Dashboard")
 
-# Configuração dos templates Jinja2
-# Certifique-se de que a pasta 'app/templates' existe no diretório do projeto
-try:
-    templates = Jinja2Templates(directory="app/templates")
-    logger.info("Templates Jinja2 carregados com sucesso.")
-except Exception as e:
-    logger.error(f"Erro ao carregar diretório de templates: {e}")
+# Configurações de Template e Estáticos
+templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-# Injeção de Dependência para Sessão de Banco de Dados (SOLID)
+# Dependência do Banco de Dados
 def get_db():
-    """
-    Motivo: Gerenciar o ciclo de vida da conexão com o banco de dados,
-    garantindo que a sessão seja fechada após cada requisição.
-    """
     db = SessionLocal()
     try:
         yield db
@@ -37,34 +23,37 @@ def get_db():
         db.close()
 
 @app.get("/")
-async def home(request: Request, db: Session = Depends(get_db)):
-    """
-    Docstring: Renderiza o dashboard principal.
-    A busca utiliza order_by para exibir as promoções mais recentes primeiro.
-    """
-    try:
-        # Busca as últimas 50 promoções no SQLite
-        promocoes = db.query(PromoModel).order_by(PromoModel.data_criacao.desc()).limit(50).all()
-        
-        logger.debug(f"Dashboard acessado via Proxy. {len(promocoes)} registros encontrados.")
-        
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "promocoes": promocoes,
-            "status_worker": "Ativo"
-        })
-    except Exception as e:
-        logger.error(f"Erro ao renderizar dashboard: {e}", exc_info=True)
-        return {"error": "Falha interna ao carregar o painel. Verifique os logs do servidor."}
+async def index(request: Request, db: Session = Depends(get_db)):
+    """Lista todas as promoções salvas no banco."""
+    promos = db.query(PromoModel).order_by(PromoModel.data_captura.desc()).all()
+    return templates.TemplateResponse("index.html", {"request": request, "promos": promos})
 
-@app.get("/health")
-def health_check():
-    """
-    Motivo: Endpoint para monitoramento de disponibilidade (Health Check) 
-    útil para configurações de Uptime do Google Cloud.
-    """
-    return {
-        "status": "online",
-        "version": "3.2.0",
-        "context": "GCP Instance behind Nginx"
-    }
+@app.get("/admin")
+async def admin_panel(request: Request, db: Session = Depends(get_db)):
+    """Carrega o painel de configuração de filtros e canais."""
+    config = db.query(ConfigModel).filter(ConfigModel.id == "global").first()
+    if not config:
+        config = ConfigModel(id="global")
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+    return templates.TemplateResponse("admin.html", {"request": request, "config": config})
+
+@app.post("/admin/save")
+async def save_configs(
+    keywords: str = Form(...), 
+    channels: str = Form(...), 
+    db: Session = Depends(get_db)
+):
+    """Salva as novas configurações enviadas pela web."""
+    try:
+        config = db.query(ConfigModel).filter(ConfigModel.id == "global").first()
+        config.keywords = keywords.lower().strip()
+        config.channels = channels.lower().replace("@", "").replace(" ", "").strip()
+        db.commit()
+        logger.info("Configurações atualizadas via Painel Web.")
+        return RedirectResponse(url="/admin", status_code=303)
+    except Exception as e:
+        logger.error(f"Falha ao salvar configurações: {e}")
+        db.rollback()
+        return {"error": "Falha ao salvar"}

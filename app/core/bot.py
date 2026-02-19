@@ -1,80 +1,88 @@
 import logging
 import re
 import hashlib
+import asyncio
 from telethon import TelegramClient, events
 from config import settings
-from core.database import SessionLocal, PromoModel
+from core.database import SessionLocal, PromoModel, ConfigModel
 
-# Logger específico para o Motor de Captura
 logger = logging.getLogger("BotWorker")
 
 class PromotionBot:
     """
-    Docstring: Motor principal de captura e filtragem de mensagens.
-    O motivo desta lógica existir é transformar mensagens de texto não estruturadas
-    em objetos de dados prontos para o banco e para o seu grupo.
+    Docstring: Motor de captura inteligente com filtros dinâmicos via DB.
+    O motivo desta lógica existir é permitir que o Arquiteto gerencie o bot
+    totalmente via interface web, filtrando ruído e mantendo a produtividade.
     """
     def __init__(self):
-        # Usamos um nome de sessão fixo para evitar re-login constante
         self.client = TelegramClient('promo_engine_session', settings.API_ID, settings.API_HASH)
 
     def generate_id(self, text: str) -> str:
-        """Gera um hash único para evitar duplicados."""
         return hashlib.md5(text.encode()).hexdigest()
 
     def extract_price(self, text: str) -> float:
-        """Tenta extrair o preço da mensagem usando Regex."""
         try:
             match = re.search(r'R\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})', text)
             if match:
-                # Converte "1.299,00" para 1299.00
                 return float(match.group(1).replace('.', '').replace(',', '.'))
-        except Exception as e:
-            logger.debug(f"Falha na extração de preço: {e}")
+        except Exception:
+            pass
         return 0.0
 
     async def start(self):
-        """Inicia a escuta nos canais alvo."""
-        logger.info("Iniciando escuta nos canais do Telegram...")
+        logger.info("Iniciando motor de captura silencioso (v7.1.0)...")
         
-        @self.client.on(events.NewMessage(chats=settings.TARGET_CHANNELS))
+        @self.client.on(events.NewMessage())
         async def my_event_handler(event):
-            db = SessionLocal() # Sessão local por evento para evitar deadlocks
+            db = SessionLocal()
             try:
+                # 1. Carrega configurações dinâmicas do banco
+                sys_config = db.query(ConfigModel).filter(ConfigModel.id == "global").first()
+                if not sys_config: return
+                
+                target_channels = sys_config.channels.split(',')
+                keywords = sys_config.keywords.split(',')
+
+                # Verifica se a mensagem vem de um dos canais monitorados
+                if event.chat and hasattr(event.chat, 'username'):
+                    if event.chat.username not in target_channels:
+                        return
+                else:
+                    return
+
                 msg_text = event.message.message
                 if not msg_text: return
                 
+                # Evita duplicatas
                 msg_id = self.generate_id(msg_text)
-
-                # Verificação de duplicidade
-                exists = db.query(PromoModel).filter(PromoModel.id == msg_id).first()
-                if exists:
-                    logger.debug(f"Oferta duplicada ignorada: {msg_id}")
+                if db.query(PromoModel).filter(PromoModel.id == msg_id).first():
                     return
 
-                # Extração de dados
+                # 2. Persistência no Banco (Dashboard Web)
                 preco = self.extract_price(msg_text)
-                primeira_linha = msg_text.split('\n')[0][:100]
-                
-                # Criando o registro
                 new_promo = PromoModel(
                     id=msg_id,
-                    titulo=primeira_linha,
+                    titulo=msg_text.split('\n')[0][:100],
                     preco=preco,
                     link=f"https://t.me/{event.chat.username}/{event.message.id}",
-                    fonte=f"Telegram - {event.chat.username}",
-                    loja="Identificação pendente" # Expansível com novas regex
+                    fonte=f"Telegram - {event.chat.username}"
                 )
-
                 db.add(new_promo)
                 db.commit()
-                
-                # Encaminhamento para o seu grupo privado
-                await self.client.send_message(settings.MY_PRIVATE_GROUP_ID, event.message)
-                logger.info(f"Nova oferta capturada: {primeira_linha}")
+
+                # 3. Filtro de Interesse para envio ao Telegram do Arquiteto
+                texto_low = msg_text.lower()
+                match_keywords = any(kw.strip() in texto_low for kw in keywords if kw.strip())
+
+                if match_keywords:
+                    await self.client.send_message(settings.MY_PRIVATE_GROUP_ID, event.message)
+                    logger.info(f"✅ Notificação enviada (Filtro Web): {new_promo.titulo}")
+                else:
+                    logger.debug(f"📁 Apenas arquivado no DB: {new_promo.titulo}")
 
             except Exception as e:
-                logger.error(f"Erro ao processar mensagem: {e}", exc_info=True)
+                logger.error(f"Erro no processamento do bot: {e}", exc_info=True)
+                db.rollback()
             finally:
                 db.close()
 
