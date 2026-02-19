@@ -1,0 +1,8 @@
+.env
+*.db
+logs/
+__pycache__/
+venv/
+*.session
+*.session-journal
+test_promo.py
