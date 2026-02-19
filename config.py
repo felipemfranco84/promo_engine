@@ -20,21 +20,19 @@ logger = logging.getLogger("ConfigModule")
 
 class Settings(BaseSettings):
     """
-    Docstring: Gerencia as configurações via .env e define filtros de busca.
-    O motivo desta lógica existir é centralizar o estado e permitir 
-    a filtragem seletiva de ofertas para o Telegram.
+    Docstring: Centralização de configurações e segredos.
+    O motivo desta lógica existir é prover ao sistema acesso às credenciais
+    do Telegram e ao caminho do banco de dados SQLite.
     """
     API_ID: int
     API_HASH: str
     PHONE_NUMBER: str
     MY_PRIVATE_GROUP_ID: int
+    
+    # Atributo que estava faltando:
     DATABASE_URL: str = "sqlite:///./promo_engine.db"
     
-    # Canais que o bot deve monitorar
-    TARGET_CHANNELS: List[str] = ["gafanhotopromocoes", "pelando", "cupomonline", "mercadolivre"]
-    
-    # PALAVRAS-CHAVE: Apenas ofertas com estes termos irão para o seu Telegram
-    KEYWORDS_INTEREST: List[str] = ["iphone", "celular", "cerveja", "rtx", "monitor", "cupom", "notebook"]
+    TARGET_CHANNELS: List[str] = ["gafanhotopromocoes", "pelando", "cupomonline"]
 
     model_config = {
         "env_file": ".env",
@@ -44,7 +42,7 @@ class Settings(BaseSettings):
 
 try:
     settings = Settings()
-    logger.info("Configurações e filtros de interesse carregados.")
+    logger.info("Configurações carregadas com sucesso.")
 except Exception as e:
-    logger.error(f"Erro crítico ao carregar configurações: {e}")
+    logger.error(f"Erro ao carregar Settings: {e}")
     raise
